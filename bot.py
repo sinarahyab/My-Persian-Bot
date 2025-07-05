@@ -1,76 +1,46 @@
+from aiogram import Bot, Dispatcher, types, executor
 import os
-import logging
-import tempfile
-from telegram import Update
-from telegram.ext import Application, MessageHandler, filters, ContextTypes
 import whisper
-import ffmpeg
+import openai
 
-# تنظیمات ربات
-TOKEN = os.getenv("TELEGRAM_TOKEN")  # توکن را در تنظیمات رازها قرار دهید
-MAX_SIZE = 2000 * 1024 * 1024  # 2 گیگابایت
+API_TOKEN = 'توکن ربات'
+openai.api_key = 'کلید OpenAI'
 
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
-logger = logging.getLogger(__name__)
+bot = Bot(token=API_TOKEN)
+dp = Dispatcher(bot)
+model = whisper.load_model("medium")  # برای دقت بالا
 
-async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        # دریافت فایل
-        file = await update.message.effective_attachment.get_file()
-        
-        if file.file_size > MAX_SIZE:
-            await update.message.reply_text("❌ حجم فایل بیش از ۲ گیگابایت است!")
-            return
-            
-        await update.message.reply_text("⏳ فایل دریافت شد. پردازش آغاز شد...")
-        
-        # دانلود فایل موقت
-        with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tmp_file:
-            await file.download_to_drive(tmp_file.name)
-            input_path = tmp_file.name
-        
-        # تبدیل به صوت
-        audio_path = f"{input_path}.wav"
-        (
-            ffmpeg.input(input_path)
-            .output(audio_path, ar=16000, ac=1)
-            .run(overwrite_output=True, quiet=True)
-        )
-        
-        # تشخیص گفتار
-        model = whisper.load_model("small")
-        result = model.transcribe(audio_path, language="fa", task="transcribe")
-        transcript = result["text"]
-        # بعد از خط result = model.transcribe(...)
-transcript = result["text"]
+@dp.message_handler(content_types=types.ContentType.VIDEO)
+async def handle_video(message: types.Message):
+    file = await message.video.get_file()
+    if message.video.file_size > 2 * 1024 * 1024 * 1024:
+        await message.reply("حجم فایل بیش از 2 گیگابایت است.")
+        return
 
-# افزودن تصحیح املایی
-from transformers import pipeline
-corrector = pipeline("text2text-generation", model="erfan226/persian-spell-checker")
-corrected_text = corrector(transcript)[0]['generated_text']
-        
-        # ویرایش متن
-        edited_text = f"📝 متن استخراج شده:\n\n{transcript}\n\n✅ پردازش کامل شد!"
-        
-        # ارسال نتیجه
-        await update.message.reply_text(edited_text)
-        
-        # پاک‌سازی فایل‌های موقت
-        os.unlink(input_path)
-        os.unlink(audio_path)
-        
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        await update.message.reply_text(f"⚠️ خطا در پردازش: {str(e)}")
+    file_path = file.file_path
+    file_on_disk = f"temp/{file.file_unique_id}.mp4"
+    await bot.download_file(file_path, destination=file_on_disk)
 
-def main():
-    app = Application.builder().token(TOKEN).build()
-    
-    # افزودن هندلر برای انواع فایل‌های رسانه‌ای
-    media_filter = filters.VIDEO | filters.AUDIO | filters.Document.VIDEO | filters.Document.AUDIO
-    app.add_handler(MessageHandler(media_filter, handle_media))
-    
-    app.run_polling()
+    # تبدیل صوت به متن
+    result = model.transcribe(file_on_disk)
+    text = result["text"]
+
+    await message.reply("متن استخراج شده:\n\n" + text[:4000])  # حداکثر 4000 کاراکتر
+
+    os.remove(file_on_disk)
 
 if __name__ == "__main__":
-    main()
+    executor.start_polling(dp, skip_updates=True)
+def summarize_news(text):
+    prompt = f"""متن زیر را به سبک یک خبر رسمی تنظیم کن:
+{text}"""
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[{"role": "user", "content": prompt}]
+    )
+    return response.choices[0].message.content.strip()
+@dp.message_handler(commands=['تنظیم_خبر'])
+async def handle_summarize(message: types.Message):
+    reply = summarize_news(message.reply_to_message.text)
+    await message.reply(reply)
+result = model.transcribe(file_on_disk, language='fa')  # fa، en، ru، zh، fr
