@@ -41,6 +41,13 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
         model = whisper.load_model("small")
         result = model.transcribe(audio_path, language="fa", task="transcribe")
         transcript = result["text"]
+        # بعد از خط result = model.transcribe(...)
+transcript = result["text"]
+
+# افزودن تصحیح املایی
+from transformers import pipeline
+corrector = pipeline("text2text-generation", model="erfan226/persian-spell-checker")
+corrected_text = corrector(transcript)[0]['generated_text']
         
         # ویرایش متن
         edited_text = f"📝 متن استخراج شده:\n\n{transcript}\n\n✅ پردازش کامل شد!"
