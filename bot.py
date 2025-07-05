@@ -80,7 +80,7 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         
         # تشخیص گفتار با تنظیمات پیشرفته
-        model = whisper.load_model("medium")
+        model = whisper.load_model("large-v3")
         result = model.transcribe(
             audio_path,
             language="fa",
@@ -91,7 +91,14 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
             fp16=False  # الزامی برای CPU
         )
         transcript = result["text"]
-        
+        # کاهش حجم متن برای پردازش بهتر
+transcript = transcript[:2000]  # فقط 2000 کاراکتر اول
+
+# ارسال به سرویس تصحیح رایگان ایرانی
+import requests
+url = "https://api.faradars.org/spell-check"
+response = requests.post(url, json={"text": transcript})
+corrected_text = response.json()["corrected_text"]
         # بهبود کیفیت متن
         await update.message.reply_text("🔧 در حال بهبود کیفیت متن...")
         enhanced_text = enhance_persian_text(transcript)
