@@ -38,7 +38,7 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         
         # تشخیص گفتار
-        model = whisper.load_model("medium")
+        model = whisper.load_model("small")
         result = model.transcribe(audio_path, language="fa", task="transcribe")
         transcript = result["text"]
         
