@@ -138,3 +138,9 @@ def main():
 
 if __name__ == "__main__":
     main()
+# زیر خطوط import اضافه کن
+from dotenv import load_dotenv
+load_dotenv()  # بارگیری متغیرهای محیطی
+
+# تغییر خط توکن به این شکل:
+TOKEN = os.getenv("TELEGRAM_TOKEN")
